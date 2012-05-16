@@ -1,0 +1,89 @@
+MoSH——移动设备上的Shell
+====
+
+The [Mobile Shell][7], or _MoSH_, has been [released on GitHub][8] as a replacement for SSH for mobile devices. The principles behind MoSH are due to be presented in a [technical paper][9] at the [2012 USENIX Annual Technical Conference][10] next month.
+
+[Mobile Shell][7]，或简称为_MoSH_，在[GitHub上发布][8]，是移动设备上SSH的替代品。阐释MoSh背后的原则的[技术论文][9]将在下月召开的[2012 USENIX年度技术会议][10]上发布。
+
+   [7]: http://mosh.mit.edu/
+   [8]: https://github.com/keithw/mosh
+   [9]: http://mosh.mit.edu/mosh-paper-draft.pdf
+   [10]: http://static.usenix.org/event/atc12/
+
+There are two significant features that distinguish Mosh from alternative mechanisms: 
+
+下述两个重要特性是MoSH有别于其它类似产品的：
+
+  * Firstly, the connection is IP address agnostic; rather than using a TCP/IP connection, data is sent via UDP/IP. As a result, if the signal drops or the device's IP address changes (because it is roaming between a WiFi and a cellular network, for example) then the connection is not reliant on the transport layer maintaining state connectivity.
+  
+  * 第一，连接是IP地址不可知的；而不是采用TCP/IP连接，数据通过UDP/IP发送。好处是，如果移动设备无信号或设备的IP地址改变（因为移动设备可以在WiFi网络和蜂窝网络间漫游），那么在传输层保持有状态连接就不那么可靠。
+  
+  * Secondly, rather than providing a transparent encrypted byte stream from client to server, and having the server respond with the screen redraw mechanisms, the Mosh client provides a variation of local echo. Thus, when the user types an 'X' on the keyboard, instead of having to round-trip between the client to sever and back to client to display the 'X' on screen, the Mosh client can display the 'X' immediately.
+  
+  * 第二，MoSH没有在客户端与服务器之间提供一个透明的加密字节流，让服务器通过重绘屏幕来响应的机制；MoSH客户端提供了一个本地echo的变体。这意味着，当用户通过键盘输入了一个‘X’，MoSH不会通过客户端将‘X’发送给服务器，再由服务器传输回客户端在屏幕上显示这种方式，而是立即在客户端屏幕上显示‘X’。
+
+These two changes are clearly a significant departure from the layered architecture of connection streams like SSH, which provide the encrypted bytestream only between two end points and then let the remote server program redraw the screen. As SSH has no knowledge of either end of the connection's use of the data, any keypresses take a minimum of one round trip to display. 
+
+这两个改变显然与层次架构的连接流，如SSH，区别明显；SSH提供了只在两个端点之间的加密字节流，然后要远程服务器程序重绘屏幕。因为SSH完全不知道连接各个端点如何使用数据，任何击键都至少要在客户端与服务器间往返一次才能显示。
+
+Mosh works by creating a server process, running in user space, listening to for UDP packets. The Mosh client then is given the address of the server (and UDP port) and initiates the connection by sending data in packets. However, since the connection itself is stateless at the network layer, if the client moves to a different IP address then UDP packets can come from a different IP address (sending to the same server) without a loss of connectivity. 
+
+MoSH在服务器创建一个进程，运行于用户空间，监听UDP包。然后将服务器地址（和UDP端口）告知MoSH客户端，并通过以数据包的形式发送数据来初始化连接。然而，因为连接本身在网络层是无状态的，如果客户端IP地址发生变化，则UDP包可以来自一个不同的IP地址（发送给同一服务器）而不会失去连接。
+
+The use of UDP, rather than TCP, also means the Mosh client/server connection has to do its own state management. Each packet in the connection has an incrementing number, and the client and server both build up a list of known packets, with the Mosh libraries initiating retransmission where necessary. (This is in essence roughly how TCP works under the covers in any case.) It is also this property which lets the Mosh client roam between different IP addresses or (in the future) between IPv4 and IPv6. The server's IP address must remain fixed however. 
+
+采用UDP，而非TCP，同样意味着MoSH客户端/服务器需要各自管理状态。连接中的每一个数据包都有一个自增长的数字，同时客户端和服务器都建立一个已知数据包的列表，当需要的时候MoSH库会重新发送数据包。（这基本上就是TCP原理的精髓。）也因为如此MoSH客户端可以在不同的IP地址或（将来）在IPv4与IPv6之间切换。服务器端的IP地址必须保持不变。
+
+Packets sent via the Mosh connection are encrypted with [AES-128 in OCB mode][11]. This provides an encrypted endpoint with a fixed key, which is generated at server startup and printed along with the connection information: 
+
+通过MoSH连接发送的数据包采用[OCB模式的AES-128算法][11]加密。该加密算法提供了采用固定密钥的加密端点，密钥在服务器启动时生成，并在连接信息中显示：
+
+   [11]: http://www.cs.ucdavis.edu/~rogaway/ocb/
+
+> $ mosh-server 
+>     
+>     MOSH CONNECT 60004 4NeCCgvZFe2RnPgrcU1PQw
+>     …
+>     
+
+Although this approach is new, AES-128 OCB has been around for a while and the authors note that they [invite further scrutiny][12]: 
+
+虽是新方法，但AES-128 OCB已经出现了一段时间，并且该算法作者指出他们正在[邀请更进一步的审查][12]：
+
+   [12]: http://mosh.mit.edu/#faq
+
+> **Has your secure datagram protocol been audited by experts?**
+> 
+> **你们的安全数据报协议已经通过专家审核了吗？**
+> 
+> No. Mosh is actively used and has been read over by security-minded crypto nerds who think its design is reasonable, but any novel datagram protocol is going to have to prove itself, and SSP is no exception. We use the reference implementations of AES-128 and OCB, and we welcome your eyes on the code. We think the radical simplicity of the design is an advantage, but of course others have thought that and have been wrong. We don't doubt it will (properly!) take time for the security community to get comfortable with mosh. 
+>
+> 还没有。MoSH开始被越来越多的使用，并且代码被有强烈安全意识的加密极客阅读过，他们认为MoSH的设计是合理的，但是任何新的数据报协议都要自我证明其安全性，SSP也不例外。我们使用了AES-128和OCB的参考实现，同时我们也欢迎人们来审阅代码。我们认为设计的简单性是个显著的优势，然而，当然别人也可能认为这是错误的。我们毫不怀疑需要花些时间（这是当然的！）才能让安全社区对MoSH的安全性感到满意。
+
+
+The second significant change is the synchronisation of screen state between client and server processes. Almost all of the time, when a user types a character (like 'X') they want the X to be displayed on screen; and when they type backspace, they want the character deleted. Similarly, the up/down/left/right arrow keys almost always move one character in that direction. 
+
+另外一个重大改变是在客户端与服务器进程见同步屏幕状态。在绝大多数时候，当用户输入一个字符后（比如字符‘X’），希望看到X显示在屏幕上；并且当他们按下退格键，用户希望字符被删除。对于上/下/左/右键来说也类似，通常是要移动一个字符。
+
+To achieve this, the mosh-server stores an emulated view of the client's screen (and vice versa) and has _predictions_ based on whether the keys typed will change the screen in a 'normal' way. If its predictions are off, it will wait for the round-trip time to the server to confirm the state of the screen (essentially, degrading to the old SSH mechanism) but in cases where it has good confidence that typing keystrokes will cause a screen update it will show those locally. In shell-like environments (where most keystrokes are echoed as-is) this reduces the perceived lag to the server, and additionally can send less network traffic because keystrokes can be sent in batched packets rather than one-at-a-time packets as used by most interactive connections.
+
+为了达到这个目标，MoSH服务器存储了一个客户端的模拟屏幕（反之亦然），并基于在“正常”情况下按键是否会改变屏幕显示来_预测_。如果预测失效，MoSH客户端将会等待与服务器间往返的时间以确认屏幕显示状态（本质上说是减少老的SSH机制），但如果MoSH确信击键会引发屏幕更新，那么MoSH将会直接在本地显示。在类shell环境中（大部分击键都要回显），这将会减少服务器端引起的感知延迟，另外也可减少网络发送的传输量，因为击键可以批量发送，而非像大多数交互式连接那样每次按键发送一个数据包。
+
+One restriction is that input is only supported via UTF-8, because multiple keypresses can be converted into a single character (and vice versa). Rather than try to tackle all encodings and input methods, Mosh only focusses on UTF-8 and ensures it gets that right. More details are available on the [technical information][13] page. 
+
+一个限制是输入只支持UTF-8，因为多次按键可以转化为单一字符（反之亦然）。MoSH不是要试图解决所有的编码和输入法的问题，而只专注于UTF-8并保证其工作正常。更多细节可参考[技术信息][13]页面。
+
+   [13]: http://mosh.mit.edu/#techinfo
+
+Mosh brings a new approach to connections between mobile devices and servers. Each client connection takes a single UDP port (and UDP must be routable between the end points) but the channel is encrypted with the private key. Since the connection can be ported to other IP addresses, concerns will naturally be raised about whether the connection can be broken into, and the fact that the 'connection' stays alive even when the client disconnects may be a concern for some. 
+
+MoSH带来了一种在移动设备和服务器间连接的新方法。每个客户端连接使用一个单独的UDP端口（UDP必须在两个端点间可达），然而通道是用私钥加密。因为连接可以转换到其它IP地址上，自然会引发对于连接可能并侵入的担忧，并且事实上“连接”在客户端断开后仍可保持对一些人来说也值得担心。
+
+However, its advantages, and in particular, its improved perception of response time, may be enough to encourage people to look at the system. And since the processes on both sides are user processes, Mosh can easily be installed into existing environments without needing elevated privileges to install. 
+
+然而，它的优势，特别是提高了响应时间的感知，可能激发人们关注这个系统。同时因为两边的进程都是用户进程，MoSH可以很容易的安装在已有的环境中，而无需提升权限进行安装。
+
+*查看英文原文：*[MoSH - The Mobile Shell][14]
+
+[14]: http://www.infoq.com/news/2012/05/mosh
+
